@@ -131,3 +131,4 @@ dmypy.json
 # media
 media/
 test.db
+logs/

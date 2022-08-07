@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:13.0-alpine
+    volumes:
+      - postgres:/var/lib/postgresql/data/
+    env_file:
+      - ./.env
+  bot:
+    platform: linux/amd64
+    build: .
+    volumes:
+      - logs:/app/logs/
+      - media:/app/media/
+    depends_on:
+      - db
+    env_file:
+      - ./.env
+
+volumes:
+  logs:
+  media:
+  postgres:

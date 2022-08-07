@@ -1,104 +1,137 @@
 import asyncio
-from functools import wraps
-import re
 from datetime import datetime
-from io import BytesIO
+from functools import wraps
 from pathlib import Path
-from typing import Optional, Union
-import time as t
+from re import split
+from time import gmtime, time
+from typing import Callable, Optional, Tuple, Union
 
 import requests as r
-from PIL import Image
 from pyppeteer import launch
-from requests.exceptions import SSLError
+from pyppeteer.errors import PageError, TimeoutError
+from requests.exceptions import ConnectionError, SSLError
 
+from screens.exceptions import ScreenshotError
 
 MEDIA_DIR = Path(__file__).resolve().parent.parent / 'media'
 
 
-def evaluation_time(func):
+def evaluation_time(func: Callable) -> tuple():
+    """Simple decorator to measure the execution time of func.
+
+    Args:
+        func (Callable): function must return tuple.
+
+    Returns:
+        tuple: unpacked return of func, execution time in seconds.
+    """
+
     @wraps(func)
     async def wrapper(*args, **kwargs):
-        start_time = t.time()
+
+        start_time = time()
         f = await func(*args, **kwargs)
-        end_time = t.time()
-        duration = t.gmtime(end_time - start_time)
+        end_time = time()
+
+        duration = gmtime(end_time - start_time)
         seconds = duration.tm_sec + duration.tm_min * 60
+
         return *f, seconds
+
     return wrapper
 
 
-def get_scheme(schemeless_link: str) -> str:
-    https_link = f'https://{schemeless_link}'
-
-    try:
-        r.head(https_link)
-    except SSLError:
-        return f'http://{schemeless_link}'
-
-    return https_link
-
-
-async def check_link(link: str) -> str:
-    """Verifies if link has http or https URI scheme. If not set one.
+def check_link(link: str) -> str:
+    """Verifies if given link has http or https URI scheme. If not sets one.
 
     Args:
-        link (str): link to website like 'google.com' or 'http://google.com'
+        link (str): Website's URL like 'google.com' or 'http://google.com'.
 
     Returns:
-        str: link to website like 'http://google.com'
+        str: Website's URL like 'http://google.com'.
     """
+
     if not link.startswith(('http://', 'https://')):
-        return get_scheme(link)
+        https_link = f'https://{link}'
+        try:
+            r.head(https_link)
+
+        except SSLError:
+            return f'http://{link}'
+
+        except ConnectionError:
+            msg = 'Страница не найдена'
+            raise ScreenshotError(msg)
+
+        return https_link
 
     return link
 
 
-async def take_screenshot(website: str) -> Union[bytes, str]:
-
-    browser = await launch()
-
-    page = await browser.newPage()
-    responce = await page.goto(website)
-    page_title = re.split(r'<title>(.*?)<\/title>', await responce.text())[1]
-    bytes_screen = await page.screenshot(
-        {MEDIA_DIR: 'example.png', 'fullPage': True}
-    )
-
-    await browser.close()
-
-    return bytes_screen, page_title
-
-
 def get_file_name(link: str, tg_user: Optional[str] = None) -> str:
-    # returns filename
-    # параметры: дата запроса + user_id пользователя тг + домен из url запроса
-    # 'http.?:\/\/w{3}?\.([\da-z\.-]+\.[a-z\.]{2,6})*\/?' - убирает www. из URL
+    """Creates name for screenshot with current date, websites domain and user_id.
+
+    Args:
+        link (str): Website's URL with http or https schema.
+        tg_user (Optional[str], optional): If given adds telegram user_id
+        to screenshots's name. Defaults to None.
+
+    Returns:
+        str: screenshots's name in format date_userid_domain.
+        Default date_domain.
+    """
 
     date = datetime.now().date()
-    domain = re.split(r'http.?:\/\/([\da-z\.-]+\.[a-z\.]{2,6})*\/?', link)[1]
+    domain = split(r'http.?:\/\/([\da-z\.-]+\.[a-z\.]{2,6})*\/?', link)[1]
 
     if tg_user:
-        return f'{date}_{tg_user}_{domain}'
-    return f'{date}_{domain}'
-
-
-def save_screenshot(byte_screenshot: Union[bytes, str], filename: str):
-    img = BytesIO(byte_screenshot)
-    img = Image.open(img)
-    img.save(MEDIA_DIR / f'{filename}.png')
+        return f'{date}_{tg_user}_{domain}.png'
+    return f'{date}_{domain}.png'
 
 
 @evaluation_time
-async def get_screenshot(link: str, tg_user: Optional[str] = None) -> None:
+async def take_screenshot(
+    website: str, tg_user: Optional[str] = None
+) -> Tuple[Union[bytes, str], str, str]:
+    """Takes screenshot of given website and saves it to media/ dir.
 
-    link = await check_link(link)
-    filename = get_file_name(link, tg_user)
-    screenshot, page_title = await take_screenshot(link)
-    save_screenshot(screenshot, filename)
+    Args:
+        website (str): URL of existing website.
+        tg_user (Optional[str], optional): Telegram uses ir. Defaults to None.
 
-    return screenshot, link, page_title
+    Returns:
+        Tuple[Union[bytes, str], str, str]: A Tuple of byte-type image,
+        website URL, website_title.
+    """
+
+    browser = await launch(
+        executablePath='/usr/bin/google-chrome-stable',
+        headless=True,
+        args=['--no-sandbox']
+    )
+    page = await browser.newPage()
+    website = check_link(website)
+
+    try:
+        await page.goto(website, dict(timeout=30000))
+
+    except PageError:
+        msg = 'Ошибка при загрузке страницы'
+        raise ScreenshotError(msg)
+
+    except TimeoutError:
+        msg = 'Превышено время ожидания ответа'
+        raise ScreenshotError(msg)
+
+    screenshot = await page.screenshot(
+        {'path': MEDIA_DIR / get_file_name(website, tg_user)}
+    )
+    page_title = await page.title()
+
+    await browser.close()
+
+    return screenshot, website, page_title
 
 
 if __name__ == '__main__':
-    asyncio.run(get_screenshot('http://google.com'))
+    asyncio.run(take_screenshot('https://google.com'))
