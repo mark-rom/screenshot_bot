@@ -2,13 +2,15 @@ import os
 from datetime import datetime as dt
 
 from dotenv import load_dotenv
-from telegram.ext import (ApplicationBuilder, CommandHandler, MessageHandler,
-                          filters)
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (ApplicationBuilder, CallbackQueryHandler,
+                          CommandHandler, MessageHandler, filters)
 
 from logger import logger as log
-from screens.exceptions import ScreenshotError
+from screens.exceptions import ScreenshotError, WHOISError
 from screens.models import Statistics, session
 from screens.screenshot import take_screenshot
+from screens.whois import parce_whois
 
 load_dotenv()
 
@@ -16,17 +18,26 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 
 
 async def start(update, context):
+
     text = """
     Привет! Я делаю скриншоты веб-страниц по ссылкам которые вы пришлете.
     Чтобы начать работу, пришлите мне любую ссылку, например wikipedia.org
     """
 
     await context.bot.send_message(
-        chat_id=update.effective_chat.id, text=text
+        chat_id=update.effective_chat.id, text=text,
+        reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(
+                    text='Добавить бота в ваш чат',
+                    url='http://t.me/{}?startgroup=true'.format(
+                        context.bot.bot.username
+                    )
+                )]]
+            )
         )
 
 
-async def send_message(update, context):
+async def send_screenshot(update, context):
 
     link = update.message.text
 
@@ -39,7 +50,8 @@ async def send_message(update, context):
     new_stat = Statistics(
             user_id=update.effective_user.id,
             website=link,
-            date=dt.now().date()
+            date=dt.now().date(),
+            success=False
         )
 
     try:
@@ -56,6 +68,11 @@ async def send_message(update, context):
                 page_title, website, ev_time
             ),
             chat_id=update.effective_chat.id,
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[[InlineKeyboardButton(
+                    'Подробнее', callback_data=f'{website}'
+                )]]
+            )
         )
 
         log.info(f'Успешный запрос к {website}')
@@ -67,17 +84,39 @@ async def send_message(update, context):
             chat_id=update.effective_chat.id, text=e.args[0],
             message_id=dummy.message_id
         )
-        new_stat.success = False
 
     except Exception as e:
         log.exception(e)
+        text = 'Произошла ошибка. Попробуйте сделать запрос позже'
+        await context.bot.edit_message_text(
+            chat_id=update.effective_chat.id, text=text,
+            message_id=dummy.message_id
+        )
 
     finally:
         session.add(new_stat)
         session.commit()
 
 
+async def whois_button(update, context):
+
+    whois = 'Не удалось получить IP-адрес указанного сайта'
+    query = update.callback_query
+
+    try:
+        whois = parce_whois(query.data)
+
+    except WHOISError as e:
+        log.error(e)
+
+    except Exception as e:
+        log.exception(e)
+
+    await query.answer(text=whois, show_alert=True)
+
+
 def check_tokens():
+
     if not BOT_TOKEN:
         log.critical(
             'Переменная окружения BOT_TOKEN не задана. Бот выключен'
@@ -90,17 +129,20 @@ def check_tokens():
 start_handler = CommandHandler('start', start)
 get_screen = MessageHandler(
     filters.Regex(r'.*?([\da-z\.-]+\.[a-z\.]{2,6})*\/?'),
-    send_message
+    send_screenshot
 )
+callback_query_answ = CallbackQueryHandler(whois_button)
 
 
 def main():
+
     if not check_tokens():
         return
     application = ApplicationBuilder().token(BOT_TOKEN).build()
 
     application.add_handler(start_handler)
     application.add_handler(get_screen)
+    application.add_handler(callback_query_answ)
     application.run_polling()
 
 
