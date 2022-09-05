@@ -8,7 +8,7 @@ from telegram.ext import (ApplicationBuilder, CallbackQueryHandler,
 
 from logger import logger as log
 from screens.exceptions import ScreenshotError, WHOISError
-from screens.models import Statistics, session
+from screens.models import Statistics, User, get_or_create, session
 from screens.screenshot import take_screenshot
 from screens.whois import parce_whois
 
@@ -20,7 +20,7 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 async def start(update, context):
 
     text = """
-    Привет! Я делаю скриншоты веб-страниц по ссылкам которые вы пришлете.
+    Привет! Я делаю скриншоты веб-страниц по ссылкам, которые вы пришлете.
     Чтобы начать работу, пришлите мне любую ссылку, например wikipedia.org
     """
 
@@ -46,11 +46,13 @@ async def send_screenshot(update, context):
         chat_id=update.effective_chat.id, text=text,
         reply_to_message_id=update.message.message_id
     )
-
+    user_instance = get_or_create(
+        session, User, tg_id=update.effective_user.id
+    )
     new_stat = Statistics(
-            user_id=update.effective_user.id,
+            user_id=user_instance.id,
             website=link,
-            date=dt.now().date(),
+            date=dt.now(),
             success=False
         )
 
@@ -104,7 +106,7 @@ async def whois_button(update, context):
     query = update.callback_query
 
     try:
-        whois = parce_whois(query.data)
+        whois = await parce_whois(query.data)
 
     except WHOISError as e:
         log.error(e)

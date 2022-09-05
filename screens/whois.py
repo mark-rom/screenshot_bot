@@ -1,15 +1,17 @@
 from re import split
 from typing import Dict
 
-import requests as r
+import asyncio
+import aiohttp
 
-from screens.exceptions import WHOISError
+from .exceptions import WHOISError
+
 
 WHOIS_URL = 'http://ip-api.com/json/'
 WHOIS_FIELDS = '?fields=status,continent,country,city,isp,org,query'
 
 
-def get_whois(domain: str) -> Dict:
+async def get_whois(domain: str) -> Dict:
     """Makes get request to get WHOIS information of given website.
 
     Args:
@@ -19,18 +21,20 @@ def get_whois(domain: str) -> Dict:
         Dict: Responce with WHOIS data. Has next fields: status, continent,
         country, city, isp, org, query.
     """
+    session = aiohttp.ClientSession()
 
     try:
-        responce = r.get(WHOIS_URL+domain+WHOIS_FIELDS)
-
-    except r.exceptions.RequestException:
+        responce = await session.get(WHOIS_URL+domain+WHOIS_FIELDS)
+    except aiohttp.ClientError:
         msg = f'Сайт "{WHOIS_URL}" недоступен'
         raise WHOISError(msg)
 
-    return responce.json()
+    session.close()
+
+    return await responce.json()
 
 
-def parce_whois(website: str) -> str:
+async def parce_whois(website: str) -> str:
     """Recieves full website URL and returns string with WHOIS data of website.
 
     Args:
@@ -46,14 +50,9 @@ def parce_whois(website: str) -> str:
         r'http.?:\/\/([\da-z\.-]+\.[a-z\.]{2,6})*\/?',
         website
     )[1]
-    responce = get_whois(clear_domain)
+    responce = await get_whois(clear_domain)
 
-    try:
-        status = responce['status']
-
-    except KeyError:
-        msg = 'В ответе ip-api отсутствует ключ "status"'
-        raise WHOISError(msg)
+    status = responce['status']
 
     if not status == 'success':
         return 'Не удалось получить информацию, status !=  success'
@@ -66,5 +65,9 @@ def parce_whois(website: str) -> str:
     )
 
 
+async def main():
+    print(await parce_whois('https://www.google.com'))
+
 if __name__ == '__main__':
-    print(parce_whois('https://www.google.com'))
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())

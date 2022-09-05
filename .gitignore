@@ -132,3 +132,4 @@ dmypy.json
 media/
 test.db
 logs/
+.vscode/

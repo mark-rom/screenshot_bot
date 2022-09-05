@@ -1,6 +1,7 @@
 import os
 
-from sqlalchemy import Boolean, Column, Date, Integer, String, create_engine
+from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Integer, String,
+                        create_engine)
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DB_ENGINE = os.getenv('DB_ENGINE')
@@ -27,14 +28,31 @@ session = Session()
 Base = declarative_base()
 
 
+class User(Base):
+    __tablename__ = 'user'
+
+    id = Column(Integer, primary_key=True)
+    tg_id = Column(Integer, unique=True)
+
+
 class Statistics(Base):
     __tablename__ = 'statistics'
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer)
+    user_id = Column(ForeignKey('user.id'))
     website = Column(String)
-    date = Column(Date)
+    date = Column(DateTime)
     success = Column(Boolean)
+
+
+def get_or_create(session, model, **kwargs):
+    instance = session.query(model).filter_by(**kwargs).first()
+    if instance:
+        return instance
+    instance = model(**kwargs)
+    session.add(instance)
+    session.commit()
+    return instance
 
 
 Base.metadata.create_all(engine)
