@@ -1,39 +1,39 @@
 # screenshot_bot
 
-### Описание: ###
+### Description: ###
 
-Тестовое задание True Positive Team.
+Test assignment for True Positive Team.
 
-Этот телеграм-бот получает сообщение со ссылкой на сайт и отправляет в ответ скриншот этого сайта. 
+This Telegram bot receives a message with a link to a website and responds with a screenshot of that website.
 
-Бот доступен для работы как в приватных, так и в групповых чатах. Для работы в групповых чатах необходимо предоставить боту право на чтение сообщений:
-1. Перейдите в диалог с ботом @BotFather
-2. Выберете вашего бота из списка
-3. Выберете кнопку "Настройки бота"
-4. Выберете кнопку "Конфиденциальность группы" и нажмите "Отключить"
+The bot is available to work in both private and group chats. To work in group chats, the bot needs to be granted permission to read messages:
+1. Go to the dialogue with the @BotFather bot.
+2. Select your bot from the list.
+3. Choose the "Bot Settings" button.
+4. Select the "Group Privacy" button and click "Disable."
 ____
 
-## Установка и запуск ##
+## Installation and Launch ##
 
-#### Клонируйте репозиторий: ####
+#### Clone the repository: ####
     git clone git@github.com:mark-rom/screenshot_bot.git
 
-#### Перейдите в репозиторий в командной строке: ####
+#### Navigate to the repository in the command line: ####
     cd screenshot_bot/
 
-#### Создайте файл .env и заполните его: ####
+#### Create a .env file and fill it: ####
     touch .env
-Структура заполнения .env файла представлена в файле example_env
+The structure for filling the .env file is presented in the example_env file.
 
-#### Запустите docker-compose в detach-режиме: ####
+#### Run docker-compose in detached mode: ####
     docker-compose up -d
-Перед выполнением команды убедитесь, что на машине работает приложение Docker.
+Before executing the command, make sure that Docker is running on the machine.
 ____
 
-## Технологии ##
+## Technologies ##
 - Python 3.10
 - Python-telegram-bot 20.0a2
 - PostgreSQL
 - SQLAlchemy
 - Docker
-- Docker-compose
+- Docker Compose
